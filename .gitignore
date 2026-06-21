@@ -1,0 +1,16 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.tmp
+*.log
+
+# HTML generated from markdown (source of truth is .md files)
+docs/*.html
