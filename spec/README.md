@@ -13,7 +13,7 @@ All ten sections are drafted. Seven are complete. Three (sections 3, 4, and 9) c
 - [x] 1. Network and peer discovery
 - [x] 2. Block structure and validation
 - [x] 3. Transaction structure and validation (draft, depends on section 9 resolution)
-- [x] 4. Privacy model — ring signatures, stealth addresses, confidential transactions (draft, open problems marked)
+- [x] 4. Privacy model — membership proofs, stealth addresses, confidential transactions (draft, open problems marked)
 - [x] 5. Consensus — PoW algorithm, difficulty adjustment
 - [x] 6. Consensus — PoS staker selection, voting, finality
 - [x] 7. Emission schedule and block reward split
@@ -27,7 +27,7 @@ All ten sections are drafted. Seven are complete. Three (sections 3, 4, and 9) c
 
 Three cryptographic design questions are unresolved. These are genuinely hard problems, not gaps from carelessness. Anyone who has worked in post-quantum cryptography will recognize them immediately.
 
-The first is post-quantum ring signatures. Standard constructions like MLSAG and CLSAG are built on elliptic curve discrete log assumptions, which Shor's algorithm breaks. A lattice-based replacement is needed that preserves ring membership proofs, key image binding, and signer anonymity. See sections 4 and 9.
+The first is post-quantum sender privacy. Ring signatures (MLSAG, CLSAG) are obsolete. Monero replaced them in January 2026 with Full-Chain Membership Proofs (FCMP++), which hide a spend among the entire output history instead of a small ring of decoys. But FCMP++ is built on curve trees over an elliptic curve cycle, so it is still discrete-log based and not post-quantum for funds security. The open question is whether a post-quantum analog of a full-chain membership proof exists: lattice or hash based, proving membership in a set of millions of outputs with proof sizes in the low kilobytes. A lattice ring signature is the weaker fallback. This may be the hardest of the three problems, since curve trees get their efficiency from recursion over a curve cycle and there is no known practical lattice equivalent. See sections 4.2 and 9.
 
 The second is the key image construction. The standard approach derives key images using the discrete log relationship between a private key and its public key. That relationship does not exist in a lattice setting. The replacement needs to be uniquely deterministic per output, unlinkable across different spends from the same wallet, and unforgeable without the private key. See section 9.6.
 

@@ -68,7 +68,7 @@ VALID = FALCON_VERIFY(pk, M, SIGNATURE)
 
 Returns true if the signature is valid, false otherwise.
 
-All wallet transaction signatures use FALCON-1024. Node identity keypairs as defined in Section 1.3 also use FALCON-1024. Ring signature construction is defined separately in Section 4 and uses FALCON as its underlying signature primitive.
+All wallet transaction signatures use FALCON-1024. Node identity keypairs as defined in Section 1.3 also use FALCON-1024. The sender-privacy construction (membership proof) is defined separately in Section 4.2 and remains an open problem.
 
 ---
 

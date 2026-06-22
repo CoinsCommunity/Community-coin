@@ -38,9 +38,9 @@ TX_HASH uniquely identifies the transaction and is used in Merkle tree construct
 
 The transfer transaction moves coin privately from one or more inputs to one or more outputs. It is the primary transaction type for sending Community between wallets.
 
-**[OPEN PROBLEM — Structure depends on commitment scheme resolution in Section 9.7]**
+**[OPEN PROBLEM — Structure depends on commitment scheme resolution in Section 9.7 and sender-privacy resolution in Section 4.2]**
 
-The transfer transaction structure as described below is conditional on the resolution of the post-quantum commitment scheme. Field sizes for commitments and range proofs will change depending on the chosen construction.
+The transfer transaction structure as described below is conditional on two unresolved design questions: the post-quantum commitment scheme (Section 9.7) and the post-quantum sender-privacy construction (Section 4.2). Field sizes and the exact membership-proof representation will change depending on the chosen constructions. The structure below assumes the full-chain membership proof model that Section 4.2 targets.
 
 **Structure:**
 
@@ -53,17 +53,17 @@ The transfer transaction structure as described below is conditional on the reso
 | OUTPUTS | Array of OUTPUT_COUNT output records |
 | FEE_COMMITMENT | Commitment to the transaction fee amount |
 | FEE_RANGE_PROOF | Range proof for the fee commitment |
-| RING_SIGNATURES | Array of INPUT_COUNT ring signatures, one per input |
+| MEMBERSHIP_PROOFS | Array of INPUT_COUNT membership proofs, one per input |
 
 **Input record structure:**
 
 | Field | Description |
 |---|---|
-| RING_MEMBERS | Array of MIN_RING_SIZE or more output references from the blockchain |
-| KEY_IMAGE | The key image for the output being spent |
+| ANONYMITY_SET_REF | Reference to the output-set commitment the membership proof is computed against |
+| KEY_IMAGE | The key image (linking tag) for the output being spent |
 | INPUT_COMMITMENT | Commitment to the input amount |
 
-An output reference identifies a specific transaction output on the blockchain by TX_HASH and output index. The true input being spent is one of the RING_MEMBERS. Which one is concealed by the ring signature.
+Under the full-chain membership proof model, ANONYMITY_SET_REF identifies the committed set of all eligible outputs the proof is made against, for example a tree root at a referenced block height, rather than an enumerated list of decoys. The true input being spent is one of the outputs in that set. Which one is concealed by the membership proof. If the lattice ring signature fallback in Section 4.2 is used instead, ANONYMITY_SET_REF enumerates the ring members and a MIN_RING_SIZE minimum applies.
 
 **Output record structure:**
 
@@ -77,10 +77,10 @@ An output reference identifies a specific transaction output on the blockchain b
 **Validity rules for transfer transactions:**
 
 1. INPUT_COUNT >= 1 and OUTPUT_COUNT >= 1.
-2. Every RING_MEMBERS array contains at least MIN_RING_SIZE entries.
-3. All RING_MEMBERS entries reference outputs that exist in finalized blocks on the canonical chain.
+2. Each input's ANONYMITY_SET_REF resolves to a valid output-set commitment on the canonical chain. Under the ring signature fallback, the enumerated set contains at least MIN_RING_SIZE entries.
+3. Every output the membership proof depends on exists in finalized blocks on the canonical chain.
 4. No KEY_IMAGE appears in the canonical chain's key image set or more than once in this transaction.
-5. Every RING_SIGNATURE is a valid ring signature over the corresponding RING_MEMBERS set.
+5. Every MEMBERSHIP_PROOF is valid for its input against the referenced anonymity set.
 6. The balance equation holds: sum(INPUT_COMMITMENT) = sum(OUTPUT_COMMITMENT) + FEE_COMMITMENT.
 7. Every RANGE_PROOF is valid for its corresponding commitment.
 8. FEE_RANGE_PROOF is valid for FEE_COMMITMENT.
@@ -115,7 +115,7 @@ Each output in the coinbase transaction is a plaintext output, not a confidentia
 | RECIPIENT_ADDRESS | The wallet address receiving this output |
 | AMOUNT | The plaintext coin amount |
 
-Coinbase outputs are not ring-signature inputs and cannot be used as decoys in ring signatures until they have matured. Coinbase outputs mature after COINBASE_MATURITY blocks. A coinbase output that has not yet matured cannot be spent or used as a decoy. COINBASE_MATURITY is a genesis parameter.
+A coinbase output cannot be spent or included in any anonymity set until it has matured. Coinbase outputs mature after COINBASE_MATURITY blocks. COINBASE_MATURITY is a genesis parameter.
 
 **Validity rules for coinbase transactions:**
 

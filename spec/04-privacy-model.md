@@ -2,8 +2,14 @@
 
 > **DRAFT — Requires independent cryptographic review before finalization.**
 > Sections marked [OPEN PROBLEM] identify unresolved design questions requiring expert input.
-> The ring signature and stealth address constructions described here are directionally correct
+> The sender-privacy and stealth address constructions described here are directionally correct
 > but require formal security proofs and expert review before implementation.
+>
+> **Note (2026-06):** This section originally specified ring signatures for sender privacy.
+> Ring signatures have been superseded in current privacy-coin design. Monero deprecated them
+> in January 2026 in favor of Full-Chain Membership Proofs (FCMP++). Section 4.2 has been
+> revised to reflect this and to reframe the open problem around a post-quantum membership
+> proof rather than a post-quantum ring signature.
 
 ---
 
@@ -13,41 +19,43 @@ Every transaction on the Community network is private. Sender, receiver, and amo
 
 Three cryptographic constructions work together to achieve this. Each closes a distinct information channel.
 
-Ring signatures conceal the sender. Stealth addresses conceal the receiver. Confidential transactions conceal the amount. Together they leave a transaction as a black box on the blockchain: provably valid, provably not double-spent, provably not creating coins from nothing, while revealing nothing about who sent it, who received it, or how much moved.
+A membership proof conceals the sender. Stealth addresses conceal the receiver. Confidential transactions conceal the amount. Together they leave a transaction as a black box on the blockchain: provably valid, provably not double-spent, provably not creating coins from nothing, while revealing nothing about who sent it, who received it, or how much moved.
 
 The cryptographic primitives underlying these constructions are defined in Section 9.
 
 ---
 
-## 4.2 Ring Signatures — Concealing the Sender
+## 4.2 Membership Proofs — Concealing the Sender
 
-A ring signature allows a member of a defined group to sign a message in a way that proves one member of the group authorized it without revealing which member. Every member of the group is an equally valid candidate to any observer.
+Sender privacy works by proving that the output being spent belongs to some set of outputs on the blockchain, without revealing which one. The larger that set, the stronger the anonymity. There are two families of construction for this, and the difference between them drives Community's design choice.
 
-In Community, when a sender spends an output, their transaction is not signed alone. Instead, the sender's output is combined with a set of decoy outputs pulled from the blockchain. The sender signs the transaction using a ring signature over this combined set. An observer can verify that one of the ring members authorized the transaction but cannot determine which one.
+**Ring signatures (the older approach).** A ring signature combines the spender's output with a small set of decoy outputs pulled from the blockchain, and proves that one member of the ring authorized the spend without revealing which. The anonymity set is the ring size, typically a small fixed number such as 16. This is the approach Monero used through 2025. Its weakness is the small anonymity set, which leaves the construction exposed to statistical decoy-analysis over time.
 
-**Ring size.** The minimum number of ring members is enforced by the protocol as MIN_RING_SIZE, a genesis parameter. This minimum applies to every transfer transaction on the network. A transaction with fewer ring members than MIN_RING_SIZE is invalid and rejected. Senders may use larger rings for additional anonymity but not smaller ones.
+**Full-chain membership proofs (the current approach).** Rather than proving membership in a small ring of decoys, the spender proves in zero knowledge that their output is one of every output that has ever existed on the chain. The anonymity set becomes the entire output history, on the order of hundreds of millions, instead of a handful of decoys. Monero deprecated ring signatures in January 2026 and replaced them with this approach, called FCMP++ (Full-Chain Membership Proofs). The construction is based on Curve Trees (eprint 2022/756) combined with Eagen's elliptic-curve divisor techniques (eprint 2022/596). It also provides forward secrecy: because the membership proof reveals nothing about which output was spent, an adversary who later gains the ability to solve the discrete logarithm problem still cannot retroactively deanonymize past spends.
 
-**Decoy selection.** Decoys are real past outputs pulled from the blockchain. The sender's wallet selects decoys according to a probability distribution that weights recently created outputs more heavily, matching the expected distribution of real spending behavior. Selecting decoys that stand out from the statistical distribution of real outputs degrades anonymity by making the true output statistically identifiable. Wallets must follow the defined decoy selection algorithm.
+Community targets the full-chain membership proof model rather than ring signatures, because a chain-wide anonymity set is strictly stronger than a fixed decoy ring and removes the decoy-selection problem entirely.
 
-The decoy selection algorithm is: select outputs from the blockchain with probability proportional to a gamma distribution fitted to the empirical age distribution of outputs at time of spending. The specific parameters of the gamma distribution are defined as genesis parameters and may be revisited based on observed network behavior before launch.
+**[OPEN PROBLEM — Requires cryptographic review — sender-privacy layer]**
 
-**[OPEN PROBLEM — Requires cryptographic review]**
+The current full-chain membership proof construction (FCMP++) is built on Curve Trees over a cycle of elliptic curves. Its security therefore rests on the discrete logarithm problem. The forward-secrecy property protects the privacy of past transactions against a future quantum adversary, which is valuable, but it does not make the construction post-quantum for funds security: the spend authorization built on top of it is still elliptic-curve based, so a quantum adversary could forge spends. For a protocol that must be post-quantum on every layer from genesis, FCMP++ cannot be adopted as-is.
 
-Standard Monero-style ring signatures (MLSAG, CLSAG) are constructed over elliptic curve groups. They rely on the discrete logarithm problem for their security. A post-quantum ring signature scheme must be constructed over a different mathematical structure.
+The open problem is whether a post-quantum analog of a full-chain membership proof exists. The construction Community needs must satisfy:
 
-Lattice-based ring signatures exist in the academic literature. They provide quantum resistance but have significantly larger signature sizes than curve-based constructions, which directly affects transaction size and block throughput. The construction chosen for Community must satisfy:
+1. Quantum resistance. Security based on lattice or hash hardness assumptions, not discrete log.
+2. Large anonymity set. Ideally chain-wide membership rather than a small decoy ring.
+3. Practical proof size. Proof size in the low kilobytes even when the membership set is in the millions, comparable to the few-kilobyte proofs FCMP++ achieves.
+4. Spend authorization. A linking mechanism (see key image below) that prevents the same output from being spent twice, and is itself post-quantum.
+5. Compatibility with MAX_BLOCK_SIZE as defined in Section 2.
 
-1. Quantum resistance — security based on lattice hardness assumptions.
-2. Ring membership proof — provably demonstrates the signer is one of the ring members.
-3. Key image binding — each output, when spent, produces a unique and consistent key image regardless of which ring it appears in, preventing double-spending.
-4. Unconditional signer anonymity — no observer can determine the actual signer given any polynomial amount of computation, including on a quantum computer.
-5. Practical signature size — the ring signature size at the minimum ring size must be compatible with MAX_BLOCK_SIZE as defined in Section 2.
+Curve Trees achieve their small proof size partly through recursive proofs over an elliptic curve cycle. There is no known lattice equivalent of that recursion that is practical at chain scale. This means the sender-privacy layer may be a harder open problem than the amount-hiding layer in Section 4.4.
 
-The specific post-quantum ring signature construction is deferred to cryptographic review. This specification uses the notation RING_SIGN(outputs, index, SPEND_SK) to denote a valid ring signature where outputs is the set of ring members, index is the position of the true signer's output in that set, and SPEND_SK is the signer's private spend key.
+A lattice-based ring signature, with its smaller but still meaningful anonymity set, is the fallback if no post-quantum full-chain construction is practical. Lattice ring signatures exist in the literature but have large signature sizes that scale with the anonymity set, which limits how large the set can be at acceptable transaction sizes.
+
+The specific construction is deferred to cryptographic review. This specification uses the notation MEMBERSHIP_PROOF(output_set, spent_output, SPEND_SK) to denote a valid proof that spent_output is in output_set, authorized by SPEND_SK, without revealing which member spent_output is.
 
 [END OPEN PROBLEM]
 
-**Key image.** Every ring signature includes a key image as defined in Section 9.6. The key image is unique to the specific output being spent. The network maintains a global set of all key images that have appeared in finalized blocks. A transaction whose key image already appears in this set is a double-spend attempt and is rejected.
+**Key image.** Every spend includes a key image as defined in Section 9.6, also called a linking tag or nullifier. The key image is unique to the specific output being spent and is derived deterministically from the spend key and the output, so the same output always produces the same key image no matter what anonymity set it is proven against. The network maintains a global set of all key images that have appeared in finalized blocks. A transaction whose key image already appears in this set is a double-spend attempt and is rejected. The key image reveals nothing about which output in the anonymity set was spent.
 
 ---
 
@@ -139,7 +147,7 @@ This equality is verifiable without knowing any individual amount due to the hom
 
 The three mechanisms address three independent information channels:
 
-Ring signatures ensure that for any transaction on the blockchain, no observer can determine which of the ring members was the true sender. The anonymity set is every wallet that has ever created an output of a matching type on the blockchain.
+The membership proof ensures that for any transaction on the blockchain, no observer can determine which output in the anonymity set was actually spent. Under the full-chain model this anonymity set is every eligible output that has ever existed on the blockchain, rather than a small ring of decoys.
 
 Stealth addresses ensure that no observer can link any output to a recipient's published address. Every output goes to a unique one-time address. No two outputs sent to the same wallet share any identifying information on the blockchain.
 
@@ -153,7 +161,7 @@ Together, a Community transaction leaks only: that a transaction occurred, at wh
 
 The view key mechanism provides an optional, selective disclosure path for situations where a wallet owner needs to prove their transaction history.
 
-A wallet owner who shares VIEW_SK allows the recipient to scan the blockchain and identify all incoming transactions to that wallet. This does not allow the recipient to spend funds. It does not reveal outgoing transactions (ring signature membership is not traceable even with VIEW_SK).
+A wallet owner who shares VIEW_SK allows the recipient to scan the blockchain and identify all incoming transactions to that wallet. This does not allow the recipient to spend funds. It does not reveal outgoing transactions, since membership proof spends are not traceable even with VIEW_SK.
 
 This disclosure is voluntary and irreversible for the period of disclosure. A wallet owner who shares VIEW_SK cannot un-share it for historical transactions already on the blockchain.
 
@@ -165,5 +173,6 @@ The protocol does not enforce or enable any mandatory disclosure mechanism. Ther
 
 | Parameter | Description |
 |---|---|
-| MIN_RING_SIZE | Minimum number of ring members in a transfer transaction |
 | MAX_COIN_VALUE | Maximum value representable in a transaction output |
+
+The sender-privacy layer adds further parameters once its construction is chosen. If a full-chain membership proof is used, the anonymity set is the whole chain and no ring-size parameter is needed. If a lattice-based ring signature fallback is used instead, a MIN_RING_SIZE parameter sets the minimum anonymity set per transfer. This is left open pending the resolution of the sender-privacy open problem in Section 4.2.
