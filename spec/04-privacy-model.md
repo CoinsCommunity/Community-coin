@@ -47,9 +47,11 @@ The open problem is whether a post-quantum analog of a full-chain membership pro
 4. Spend authorization. A linking mechanism (see key image below) that prevents the same output from being spent twice, and is itself post-quantum.
 5. Compatibility with MAX_BLOCK_SIZE as defined in Section 2.
 
-Curve Trees achieve their small proof size partly through recursive proofs over an elliptic curve cycle. There is no known lattice equivalent of that recursion that is practical at chain scale. This means the sender-privacy layer may be a harder open problem than the amount-hiding layer in Section 4.4.
+Curve Trees achieve their small proof size partly through recursive proofs over an elliptic curve cycle. There is no known lattice equivalent of that recursion that is practical at chain scale. Lattice-based accumulators with zero-knowledge membership arguments do exist (for example the constructions of Libert, Ling, Nguyen, and Wang), but their concrete proof sizes are currently impractical for chain-scale sets: on the order of hundreds of kilobytes for a set of 2^32 members, against the roughly few-kilobyte proofs FCMP++ achieves. This means the sender-privacy layer may be a harder open problem than the amount-hiding layer in Section 4.4.
 
-A lattice-based ring signature, with its smaller but still meaningful anonymity set, is the fallback if no post-quantum full-chain construction is practical. Lattice ring signatures exist in the literature but have large signature sizes that scale with the anonymity set, which limits how large the set can be at acceptable transaction sizes.
+The most promising direction toward closing this gap is recent recursive lattice argument systems, specifically LaBRADOR (Beullens and Seiler, CRYPTO 2023) and the Greyhound polynomial commitment (CRYPTO 2024) built on top of it. These provide succinct, sublinear-size proofs from Module-SIS through recursion, which is conceptually the lattice analog of the curve-cycle recursion that makes Curve Trees efficient. Whether a practical post-quantum full-chain membership proof can be assembled from these components is, as of this writing, an open research question rather than a solved construction.
+
+A lattice-based ring signature, with its smaller but still meaningful anonymity set, is the fallback if no post-quantum full-chain construction proves practical. This fallback is not hypothetical. MatRiCT (Esgin, Zhao, Steinfeld, Liu, and Liu, CCS 2019) and its successor MatRiCT+ (IEEE S&P 2022) are fully implemented post-quantum lattice RingCT protocols following Monero's RingCT model, providing a scalable lattice ring signature, a balance proof, a lattice commitment, and range proofs together, with transactions verifying in tens of milliseconds. Community's fallback design would build on this line of work. The tradeoff against the full-chain target is the smaller anonymity set inherent to the ring model.
 
 The specific construction is deferred to cryptographic review. This specification uses the notation MEMBERSHIP_PROOF(output_set, spent_output, SPEND_SK) to denote a valid proof that spent_output is in output_set, authorized by SPEND_SK, without revealing which member spent_output is.
 
@@ -125,7 +127,7 @@ Known post-quantum commitment schemes and their current limitations:
 
 Hash-based commitments satisfy requirements 1, 2, and 5 but not 3 (not homomorphic). Without homomorphism, an entirely different transaction validity proof system is required, and current alternatives are larger and more complex.
 
-Lattice-based commitments based on LWE/SIS can achieve homomorphism. Range proofs over lattice commitments are an active research area. Several academic constructions exist but they are newer, have larger proof sizes, and have received less scrutiny than Bulletproofs.
+Lattice-based commitments based on LWE/SIS can achieve homomorphism. Range proofs over lattice commitments are an active research area. The MatRiCT and MatRiCT+ protocols (Esgin et al., CCS 2019 and IEEE S&P 2022) demonstrate a lattice commitment with range proofs that is implemented and runs at practical speed, which makes the amount-hiding layer the more tractable of the two privacy open problems. The constructions are newer and have received less scrutiny than Bulletproofs, so they require careful independent review before adoption. See Section 9.7.
 
 This section will be completed after independent cryptographic review. The chosen construction determines the transaction wire format defined in Section 3 and the coinbase transaction structure defined in Section 2.
 
